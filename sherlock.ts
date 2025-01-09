@@ -26,13 +26,13 @@ export class Sherlock {
     this.accessToken = accessToken
   }
 
-  // async me() {
-  //   if (!this.accessToken) throw 'Not authenticated'
-  //   const r = await fetch(`${API_URL}/api/v0/auth/me`, {
-  //     headers: { Authorization: `Bearer ${this.accessToken}` }
-  //   })
-  //   return await r.json()
-  // }
+  async me() {
+    if (!this.accessToken) throw 'Not authenticated'
+    const r = await fetch(`${API_URL}/api/v0/auth/me`, {
+      headers: { Authorization: `Bearer ${this.accessToken}` }
+    })
+    return await r.json()
+  }
 
   async search(query: string) {
     const params = new URLSearchParams({ query })
@@ -154,11 +154,6 @@ export class Sherlock {
 
   asTools() {
     return {
-      // sherlockMe: {
-      //   description: 'Get authenticated user information',
-      //   parameters: z.object({}),
-      //   execute: async () => await this.me()
-      // },
       searchDomains: {
         description: 'Search for domain names. Returns prices in USD cents.',
         parameters: z.object({
@@ -231,6 +226,36 @@ export class Sherlock {
           paymentMethod: string, 
           paymentContextToken: string 
         }) => await this.processPayment(paymentRequestUrl, params)
+      },
+      updateDnsRecord: {
+        description: 'Update an existing DNS record',
+        parameters: z.object({
+          domainId: z.string().describe('The domain ID'),
+          recordId: z.string().describe('The record ID'),
+          type: z.string().default('TXT').describe('Record type'),
+          name: z.string().default('test-2').describe('Record name'),
+          value: z.string().default('test-2').describe('Record value'),
+          ttl: z.number().default(3600).describe('Time to live')
+        }),
+        execute: async ({ domainId, recordId, ...params }: {
+          domainId: string,
+          recordId: string,
+          type?: string,
+          name?: string,
+          value?: string,
+          ttl?: number
+        }) => await this.updateDns(domainId, recordId, params)
+      },
+      deleteDnsRecord: {
+        description: 'Delete a DNS record',
+        parameters: z.object({
+          domainId: z.string().describe('The domain ID'),
+          recordId: z.string().describe('The record ID')
+        }),
+        execute: async ({ domainId, recordId }: {
+          domainId: string,
+          recordId: string
+        }) => await this.deleteDns(domainId, recordId)
       }
     }
   }

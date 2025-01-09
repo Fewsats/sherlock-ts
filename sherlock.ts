@@ -19,10 +19,10 @@ export interface Contact {
 }
 
 export class Sherlock {
-  private accessToken: string
+  private accessToken?: string
   private contact?: Contact
   
-  constructor(accessToken: string) {
+  constructor(accessToken?: string) {
     this.accessToken = accessToken
   }
 
@@ -36,9 +36,7 @@ export class Sherlock {
 
   async search(query: string) {
     const params = new URLSearchParams({ query })
-    console.log('Search params:', params)
     const r = await fetch(`${API_URL}/api/v0/domains/search?${params}`)
-    console.log('Search response:', r)
     return await r.json()
   }
 

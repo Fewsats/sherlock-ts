@@ -1,6 +1,6 @@
 {
   "name": "sherlock-domains",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Sherlock Domains Agentic SDK",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

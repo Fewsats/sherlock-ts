@@ -105,7 +105,32 @@ export class Sherlock {
     return await r.json()
   }
 
-  async requestPurchase(domain: string, searchId: string, contact?: Contact) {
+  async getContactInformation() {
+    if (!this.accessToken) throw 'Not authenticated'
+    const r = await fetch(`${API_URL}/api/v0/users/contact-information`, {
+      headers: { Authorization: `Bearer ${this.accessToken}` }
+    })
+    return await r.json()
+  }
+
+  async setContactInformation(contact: Contact) {
+    if (!this.accessToken) throw 'Not authenticated'
+    const r = await fetch(`${API_URL}/api/v0/users/contact-information`, {
+      method: 'POST',
+      headers: { 
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(contact)
+    })
+    return await r.json()
+  }
+
+  setContact(contact: Contact) {
+    this.contact = contact
+  }
+
+  async getPurchaseOffers(domain: string, searchId: string, contact?: Contact) {
     if (!this.accessToken) throw 'Not authenticated'
     const contactInfo = contact || this.contact
     if (!contactInfo) throw 'Contact information is required'
@@ -125,15 +150,21 @@ export class Sherlock {
     return await r.json()
   }
 
-  async processPayment(paymentRequestUrl: string, {
-    offerId,
-    paymentMethod,
-    paymentContextToken
-  }: {
-    offerId: string,
-    paymentMethod: string,
-    paymentContextToken: string
-  }) {
+  async purchaseDomain(searchId: string, domain: string, paymentMethod: string = 'credit_card') {
+    if (!this.accessToken) throw 'Not authenticated'
+    const contact = await this.getContactInformation()
+    if (!contact) throw 'Contact information is required'
+    
+    const offers = await this.getPurchaseOffers(domain, searchId, contact)
+    return await this.getPaymentDetails(
+      offers.payment_request_url,
+      offers.offers[0].id,
+      paymentMethod,
+      offers.payment_context_token
+    )
+  }
+
+  async getPaymentDetails(paymentRequestUrl: string, offerId: string, paymentMethod: string, paymentContextToken: string) {
     const r = await fetch(paymentRequestUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -146,18 +177,51 @@ export class Sherlock {
     return await r.json()
   }
 
-  setContact(contact: Contact) {
-    this.contact = contact
-  }
-
   asTools() {
     return {
+      me: {
+        description: 'Makes an authenticated request to verify the current authentication status and retrieve basic user details',
+        parameters: z.object({}),
+        execute: async () => await this.me()
+      },
+      setContactInformation: {
+        description: 'Set the contact information that will be used for domain purchases and ICANN registration',
+        parameters: z.object({
+          first_name: z.string().describe('First name'),
+          last_name: z.string().describe('Last name'),
+          email: z.string().describe('Email address'),
+          address: z.string().describe('Street address'),
+          city: z.string().describe('City'),
+          state: z.string().describe('Two-letter state code for US/Canada or province name'),
+          postal_code: z.string().describe('Postal code'),
+          country: z.string().describe('Two-letter country code')
+        }),
+        execute: async (contact: Contact) => await this.setContactInformation(contact)
+      },
+      getContactInformation: {
+        description: 'Get the contact information for the Sherlock user',
+        parameters: z.object({}),
+        execute: async () => await this.getContactInformation()
+      },
       searchDomains: {
         description: 'Search for domain names. Returns prices in USD cents.',
         parameters: z.object({
           query: z.string().describe('The domain name to search for')
         }),
         execute: async ({ query }: { query: string }) => await this.search(query)
+      },
+      purchaseDomain: {
+        description: 'Purchase a domain. This method won\'t charge your account, it will return the payment information needed to complete the purchase',
+        parameters: z.object({
+          searchId: z.string().describe('Search ID from a previous search request'),
+          domain: z.string().describe('Domain name to purchase'),
+          paymentMethod: z.string().default('credit_card').describe('Payment method to use {\'credit_card\', \'lightning\'}')
+        }),
+        execute: async ({ searchId, domain, paymentMethod = 'credit_card' }: {
+          searchId: string,
+          domain: string,
+          paymentMethod?: string
+        }) => await this.purchaseDomain(searchId, domain, paymentMethod)
       },
       listDomains: {
         description: 'List domains owned by the authenticated user',
@@ -180,50 +244,13 @@ export class Sherlock {
           value: z.string().default('test-1').describe('Record value'),
           ttl: z.number().default(3600).describe('Time to live')
         }),
-        execute: async ({ domainId, ...params }: { 
-          domainId: string, 
-          type?: string, 
-          name?: string, 
-          value?: string, 
-          ttl?: number 
+        execute: async ({ domainId, ...params }: {
+          domainId: string,
+          type?: string,
+          name?: string,
+          value?: string,
+          ttl?: number
         }) => await this.createDns(domainId, params)
-      },
-      requestDomainPurchase: {
-        description: 'Request a purchase of a domain',
-        parameters: z.object({
-          domain: z.string().describe('The domain name'),
-          searchId: z.string().describe('The search ID'),
-          contact: z.object({
-            first_name: z.string(),
-            last_name: z.string(),
-            email: z.string(),
-            address: z.string(),
-            city: z.string(),
-            state: z.string(),
-            postal_code: z.string(),
-            country: z.string()
-          }).optional().describe('Contact information')
-        }),
-        execute: async ({ domain, searchId, contact }: { 
-          domain: string, 
-          searchId: string, 
-          contact?: Contact 
-        }) => await this.requestPurchase(domain, searchId, contact)
-      },
-      processPayment: {
-        description: 'Process a payment for an offer',
-        parameters: z.object({
-          paymentRequestUrl: z.string().describe('Payment request URL'),
-          offerId: z.string().describe('Offer ID'),
-          paymentMethod: z.string().describe('Payment method'),
-          paymentContextToken: z.string().describe('Payment context token')
-        }),
-        execute: async ({ paymentRequestUrl, ...params }: { 
-          paymentRequestUrl: string, 
-          offerId: string, 
-          paymentMethod: string, 
-          paymentContextToken: string 
-        }) => await this.processPayment(paymentRequestUrl, params)
       },
       updateDnsRecord: {
         description: 'Update an existing DNS record',

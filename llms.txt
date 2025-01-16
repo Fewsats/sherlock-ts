@@ -1,0 +1,101 @@
+# Sherlock Domains TypeScript SDK
+
+A TypeScript SDK for managing domain names and DNS records through the Sherlock API.
+
+## Installation
+
+```bash
+npm install sherlock-domains
+```
+
+## Core Concepts
+
+- The SDK provides a `Sherlock` class that handles authentication and API interactions
+- Supports domain search, purchase, and DNS management
+- Handles contact information required by ICANN
+- Supports credit card and Lightning Network payments
+
+## Key Methods
+
+### Authentication & Setup
+- `new Sherlock(accessToken)` - Initialize client with access token
+- `me()` - Get authenticated user information 
+
+### Domain Management
+- `search(query)` - Search for available domains
+- `domains()` - List owned domains
+- `purchaseDomain(searchId, domain, paymentMethod='credit_card')` - Purchase a domain
+
+### Contact Information
+- `setContactInformation(contact)` - Set ICANN contact info
+- `getContactInformation()` - Get current contact information
+
+### DNS Management
+- `dnsRecords(domainId)` - Get DNS records for a domain
+- `createDns(domainId, {type, name, value, ttl})` - Create DNS record
+- `updateDns(domainId, recordId, {type, name, value, ttl})` - Update DNS record
+- `deleteDns(domainId, recordId)` - Delete DNS record
+
+## Common Patterns
+
+1. Domain Search & Purchase:
+```typescript
+const sherlock = new Sherlock('your-token')
+const results = await sherlock.search("example.com")
+if (results.available) {
+    const purchase = await sherlock.purchaseDomain(
+        results.id,
+        "example.com",
+        'credit_card'
+    )
+}
+```
+
+2. DNS Management:
+```typescript
+const sherlock = new Sherlock('your-token')
+const domains = await sherlock.domains()
+const domainId = domains[0].id
+
+// Create DNS record
+await sherlock.createDns(domainId, {
+    type: "A",
+    name: "www",
+    value: "1.2.3.4",
+    ttl: 3600
+})
+```
+
+## Agent Integration
+
+The SDK is designed to be easily integrated with AI agents through the `asTools()` method, which returns a collection of functions with Zod schemas ready to be used by LLM tools/functions implementations.
+
+### Available Agent Tools
+
+```typescript
+const sherlock = new Sherlock()
+const tools = sherlock.asTools()
+// Returns: me, setContactInformation, getContactInformation, searchDomains,
+// purchaseDomain, listDomains, getDnsRecords, createDnsRecord,
+// updateDnsRecord, deleteDnsRecord
+```
+
+Each tool includes:
+- Description
+- Zod parameter schema
+- Execute function
+
+## Important Notes
+
+1. Contact Information Requirements:
+- All fields are required for domain registration
+- Must be set before attempting domain purchases
+- Validated by ICANN standards
+
+2. Payment Methods:
+- credit_card: Returns payment details
+- lightning: Returns Lightning Network payment info
+
+3. DNS Record Types:
+- Supports standard record types: A, AAAA, CNAME, MX, TXT, etc.
+- TTL is specified in seconds (default: 3600)

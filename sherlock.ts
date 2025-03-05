@@ -18,6 +18,23 @@ export interface Contact {
   country: string;
 }
 
+// Throws error with details if contact info is incomplete
+export function requireCompleteContact(contact?: any): asserts contact is Contact {
+  if (!contact) {
+    throw { error: 'Contact information is required' }
+  }
+  
+  const requiredFields = ['first_name', 'last_name', 'email', 'address', 'city', 'state', 'postal_code', 'country']
+  const missingFields = requiredFields.filter(field => !contact[field] || contact[field].trim() === '')
+  
+  if (missingFields.length > 0) {
+    throw { 
+      error: `Incomplete contact information: ${missingFields.join(', ')} ${missingFields.length === 1 ? 'is' : 'are'} required and cannot be empty`,
+      missingFields
+    }
+  }
+}
+
 export class Sherlock {
   private accessToken?: string
   private contact?: Contact
@@ -26,18 +43,34 @@ export class Sherlock {
     this.accessToken = accessToken
   }
 
+  async handleResponse(response: Response) {
+    const data = await response.json()
+    
+    // Check for HTTP error status
+    if (!response.ok) {
+      throw { status: response.status, ...data }
+    }
+    
+    // Check for error field in the response data (even with 200 status)
+    if (data && data.error) {
+      throw { status: response.status, ...data }
+    }
+    
+    return data
+  }
+
   async me() {
     if (!this.accessToken) throw 'Not authenticated'
     const r = await fetch(`${API_URL}/api/v0/auth/me`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async search(query: string) {
     const params = new URLSearchParams({ query })
     const r = await fetch(`${API_URL}/api/v0/domains/search?${params}`)
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async domains() {
@@ -45,7 +78,7 @@ export class Sherlock {
     const r = await fetch(`${API_URL}/api/v0/domains/domains`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async dnsRecords(domainId: string) {
@@ -53,7 +86,7 @@ export class Sherlock {
     const r = await fetch(`${API_URL}/api/v0/domains/${domainId}/dns/records`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async createDns(domainId: string, {
@@ -73,7 +106,7 @@ export class Sherlock {
         records: [{type, name, value, ttl}]
       })
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async updateDns(domainId: string, recordId: string, {
@@ -93,7 +126,7 @@ export class Sherlock {
         records: [{id: recordId, type, name, value, ttl}]
       })
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async deleteDns(domainId: string, recordId: string) {
@@ -102,7 +135,7 @@ export class Sherlock {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${this.accessToken}` }
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async getContactInformation() {
@@ -110,7 +143,7 @@ export class Sherlock {
     const r = await fetch(`${API_URL}/api/v0/users/contact-information`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async setContactInformation(contact: Contact) {
@@ -123,7 +156,7 @@ export class Sherlock {
       },
       body: JSON.stringify(contact)
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   setContact(contact: Contact) {
@@ -133,7 +166,9 @@ export class Sherlock {
   async getPurchaseOffers(domain: string, searchId: string, contact?: Contact) {
     if (!this.accessToken) throw 'Not authenticated'
     const contactInfo = contact || this.contact
-    if (!contactInfo) throw 'Contact information is required'
+    
+    // Check contact info is complete
+    requireCompleteContact(contactInfo)
 
     const r = await fetch(`${API_URL}/api/v0/domains/purchase`, {
       method: 'POST',
@@ -147,15 +182,24 @@ export class Sherlock {
         search_id: searchId
       })
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   async purchaseDomain(searchId: string, domain: string, paymentMethod: string = 'credit_card') {
+    console.log('purchaseDomain', searchId, domain, paymentMethod)
     if (!this.accessToken) throw 'Not authenticated'
+    
     const contact = await this.getContactInformation()
-    if (!contact) throw 'Contact information is required'
+    console.log('purchaseDomain', contact)
+    
+    // This will throw with detailed message if contact info is incomplete
+    requireCompleteContact(contact)
     
     const offers = await this.getPurchaseOffers(domain, searchId, contact)
+    console.log('purchaseDomain', offers)
+    
+    // Since we've properly handled errors in getPurchaseOffers,
+    // we can safely access these properties
     return await this.getPaymentDetails(
       offers.payment_request_url,
       offers.offers[0].id,
@@ -174,7 +218,7 @@ export class Sherlock {
         payment_context_token: paymentContextToken
       })
     })
-    return await r.json()
+    return this.handleResponse(r)
   }
 
   asTools() {

@@ -67,6 +67,19 @@ export class Sherlock {
     return this.handleResponse(r)
   }
 
+  async claimAccount(email: string) {
+    if (!this.accessToken) throw 'Not authenticated'
+    const r = await fetch(`${API_URL}/api/v0/auth/email-link`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email })
+    })
+    return this.handleResponse(r)
+  }
+
   async search(query: string) {
     const params = new URLSearchParams({ query })
     const r = await fetch(`${API_URL}/api/v0/domains/search?${params}`)
@@ -77,6 +90,19 @@ export class Sherlock {
     if (!this.accessToken) throw 'Not authenticated'
     const r = await fetch(`${API_URL}/api/v0/domains/domains`, {
       headers: { Authorization: `Bearer ${this.accessToken}` }
+    })
+    return this.handleResponse(r)
+  }
+
+  async updateNameservers(domainId: string, nameservers: string[]) {
+    if (!this.accessToken) throw 'Not authenticated'
+    const r = await fetch(`${API_URL}/api/v0/domains/${domainId}/nameservers`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ nameservers })
     })
     return this.handleResponse(r)
   }
@@ -175,6 +201,51 @@ export class Sherlock {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        domain,
+        contact_information: contactInfo,
+        search_id: searchId
+      })
+    })
+    return this.handleResponse(r)
+  }
+
+  async getX402PurchaseOffers(domain: string, searchId: string, contact?: Contact) {
+    if (!this.accessToken) throw 'Not authenticated'
+    const contactInfo = contact || this.contact
+
+    requireCompleteContact(contactInfo)
+
+    const r = await fetch(`${API_URL}/api/v0/domains/purchase-x402`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        domain,
+        contact_information: contactInfo,
+        search_id: searchId
+      })
+    })
+
+    const data = await r.json()
+    return { status: 402, ...data }
+  }
+
+  async purchaseX402(domain: string, searchId: string, paymentSignature: string, contact?: Contact) {
+    if (!this.accessToken) throw 'Not authenticated'
+    const contactInfo = contact || this.contact
+
+    requireCompleteContact(contactInfo)
+
+    const r = await fetch(`${API_URL}/api/v0/domains/purchase-x402`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+        'PAYMENT-SIGNATURE': paymentSignature
       },
       body: JSON.stringify({
         domain,
@@ -325,6 +396,48 @@ export class Sherlock {
           domainId: string,
           recordId: string
         }) => await this.deleteDns(domainId, recordId)
+      },
+      claimAccount: {
+        description: 'Claim an account by sending an email link for authentication',
+        parameters: z.object({
+          email: z.string()
+        }),
+        execute: async ({ email }: { email: string }) => await this.claimAccount(email)
+      },
+      updateNameservers: {
+        description: 'Update the nameservers for a domain',
+        parameters: z.object({
+          domainId: z.string(),
+          nameservers: z.array(z.string())
+        }),
+        execute: async ({ domainId, nameservers }: {
+          domainId: string,
+          nameservers: string[]
+        }) => await this.updateNameservers(domainId, nameservers)
+      },
+      getX402PurchaseOffers: {
+        description: 'Get X402 purchase offers for a domain. Returns payment requirements with a 402 status.',
+        parameters: z.object({
+          domain: z.string(),
+          searchId: z.string()
+        }),
+        execute: async ({ domain, searchId }: {
+          domain: string,
+          searchId: string
+        }) => await this.getX402PurchaseOffers(domain, searchId)
+      },
+      purchaseX402: {
+        description: 'Complete an X402 domain purchase with a payment signature',
+        parameters: z.object({
+          domain: z.string(),
+          searchId: z.string(),
+          paymentSignature: z.string()
+        }),
+        execute: async ({ domain, searchId, paymentSignature }: {
+          domain: string,
+          searchId: string,
+          paymentSignature: string
+        }) => await this.purchaseX402(domain, searchId, paymentSignature)
       }
     }
   }
